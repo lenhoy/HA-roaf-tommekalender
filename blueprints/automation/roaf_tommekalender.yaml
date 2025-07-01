@@ -1,0 +1,107 @@
+blueprint:
+  name: ROAF Hentekalender
+  description: >-
+    Hent hentedatoer fra ROAF sitt API og legg de til i Home Assistant kalenderen.
+  domain: automation
+  input:
+    appkey:
+      name: App Key
+      description: Nøkkel for ROAF API
+      selector:
+        text:
+    kommunenr:
+      name: Kommunenummer
+      selector:
+        text:
+    gatenavn:
+      name: Gatenavn
+      selector:
+        text:
+    gatekode:
+      name: Gatekode
+      selector:
+        text:
+    husnr:
+      name: Husnummer
+      selector:
+        text:
+    calendar:
+      name: Kalender
+      selector:
+        entity:
+          domain: calendar
+
+trigger:
+  - platform: template
+    value_template: >-
+      {{ now().isoweekday() == 1 }}
+
+variables:
+  api_url: >-
+    https://norkartrenovasjon.azurewebsites.net/proxyserver.ashx?server=https://komteksky.norkart.no/MinRenovasjon.Api/api/tommekalender/?kommunenr={{ kommunenr }}&gatenavn={{ gatenavn | urlencode }}&gatekode={{ gatekode }}&husnr={{ husnr }}
+
+mode: single
+
+sequence:
+  - alias: Hent tømmekalender fra ROAF
+    service: rest_command.roaf_hent
+    data:
+      url: "{{ api_url }}"
+      method: GET
+      headers:
+        Renovasjonappkey: "{{ appkey }}"
+        Kommunenr: "{{ kommunenr }}"
+    response_variable: roaf_response
+
+  - alias: Avbryt hvis feilet
+    if:
+      - condition: template
+        value_template: "{{ roaf_response['status'] != 200 }}"
+    then:
+      - service: persistent_notification.create
+        data:
+          title: 'ROAF kalender'
+          message: 'Kunne ikke hente data fra ROAF API'
+      - stop: API-feil
+
+  - variables:
+      upcoming: |
+        {% set events = state_attr(calendar, 'entries') %}
+        {% if events is none %}
+          []
+        {% else %}
+          {{ events }}
+        {% endif %}
+      existing_by_type: >-
+        {{ upcoming | groupby('summary') | map(attribute=1) | list }}
+      fraksjoner: |
+        {%- set data = roaf_response['content'] if roaf_response['content'] is string -%}
+        {%- set parsed = data | from_json -%}
+        {{ parsed }}
+
+  - repeat:
+      for_each: "{{ fraksjoner }}"
+      sequence:
+        - variables:
+            fraksjon: "{{ repeat.item.FraksjonId }}"
+            dates: "{{ repeat.item.Tommedatoer }}"
+            name: >-
+              {% if fraksjon == 1 %}Restavfall{% elif fraksjon == 2 %}Papir{% elif fraksjon == 17 %}Matavfall{% else %}Fraksjon {{ fraksjon }}{% endif %}
+            existing_dates: >-
+              {{ upcoming | selectattr('summary','==', name) | map(attribute='start') | list }}
+        - repeat:
+            for_each: "{{ dates }}"
+            sequence:
+              - if:
+                  - condition: template
+                    value_template: "{{ repeat.item[:10] not in existing_dates }}"
+                then:
+                  - service: calendar.create_event
+                    target:
+                      entity_id: !input calendar
+                    data:
+                      summary: "{{ name }}"
+                      start_date: "{{ repeat.item[:10] }}"
+                      end_date: >-
+                        {{ (as_datetime(repeat.item[:10]) + timedelta(days=1)).strftime('%Y-%m-%d') }}
+
