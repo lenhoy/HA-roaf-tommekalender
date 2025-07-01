@@ -1,0 +1,8 @@
+rest_command:
+  roaf_hent:
+    url: "{{ url }}"
+    method: GET
+    headers:
+      Renovasjonappkey: "{{ headers.Renovasjonappkey }}"
+      Kommunenr: "{{ headers.Kommunenr }}"
+

@@ -37,12 +37,22 @@ trigger:
       {{ now().isoweekday() == 1 }}
 
 variables:
-  api_url: >-
-    https://norkartrenovasjon.azurewebsites.net/proxyserver.ashx?server=https://komteksky.norkart.no/MinRenovasjon.Api/api/tommekalender/?kommunenr={{ kommunenr }}&gatenavn={{ gatenavn | urlencode }}&gatekode={{ gatekode }}&husnr={{ husnr }}
+  # Make blueprint input available as a script level variable
+  kommunenr: !input kommunenr
+  gatenavn: !input gatenavn
+  gatekode: !input gatekode
+  husnr: !input husnr
+  appkey: !input appkey
+  calendar: !input calendar
 
 mode: single
 
-sequence:
+actions:
+  - alias: Bygge api url fra input
+    variables:
+      #build api url from input
+      api_url: "https://norkartrenovasjon.azurewebsites.net/proxyserver.ashx?server=https://komteksky.norkart.no/MinRenovasjon.Api/api/tommekalender/?kommunenr={{ kommunenr }}&gatenavn={{ gatenavn | urlencode }}&gatekode={{ gatekode }}&husnr={{ husnr }}"
+
   - alias: Hent tømmekalender fra ROAF
     service: rest_command.roaf_hent
     data:
@@ -60,8 +70,8 @@ sequence:
     then:
       - service: persistent_notification.create
         data:
-          title: 'ROAF kalender'
-          message: 'Kunne ikke hente data fra ROAF API'
+          title: "ROAF kalender"
+          message: "Kunne ikke hente data fra ROAF API"
       - stop: API-feil
 
   - variables:
@@ -104,4 +114,3 @@ sequence:
                       start_date: "{{ repeat.item[:10] }}"
                       end_date: >-
                         {{ (as_datetime(repeat.item[:10]) + timedelta(days=1)).strftime('%Y-%m-%d') }}
-
