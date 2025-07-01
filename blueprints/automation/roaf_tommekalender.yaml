@@ -2,6 +2,7 @@ blueprint:
   name: ROAF Hentekalender
   description: >-
     Hent hentedatoer fra ROAF sitt API og legg de til i Home Assistant kalenderen.
+    Krever at `rest_command.roaf_hent` er konfigurert. Se README for detaljer.
   domain: automation
   input:
     appkey:
