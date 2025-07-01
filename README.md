@@ -16,7 +16,7 @@ Legg følgende i `configuration.yaml` (eller i en inkludert fil):
 rest_command:
   roaf_hent:
     url: "{{ url }}"
-    method: "{{ method }}"
+    method: GET
     headers:
       Renovasjonappkey: "{{ headers.Renovasjonappkey }}"
       Kommunenr: "{{ headers.Kommunenr }}"
