@@ -1,0 +1,127 @@
+alias: Roaf hentekalender auto-update
+description: >-
+  Benutzt Appdaemon app "roaf_scraper" um von Roafs Webpage die Datums zu holen
+  jede Woche.
+triggers:
+  - trigger: template
+    value_template: |-
+      {# Läuft einmal die Woche wenn's Montag wird #}
+      {{ now().isoweekday() == 1 }}
+conditions: []
+actions:
+  - event: RUN_ROAF_SCRAPER
+    event_data: {}
+  - wait_for_trigger:
+      - trigger: state
+        entity_id:
+          - sensor.roaf_neste_hentedatoer
+    timeout:
+      hours: 0
+      minutes: 2
+      seconds: 0
+      milliseconds: 0
+  - if:
+      - condition: template
+        value_template: >-
+          {# check if the sensor has not been updated or if something is wrong
+          with it #}
+
+          {% set last_updated = state_attr("sensor.roaf_neste_hentedatoer",
+          "last_updated_successfully") %}
+
+          {% set sensor_state = states("sensor.roaf_neste_hentedatoer") %}
+
+          {% if last_updated and sensor_state == "ok" %}
+            {{ (as_timestamp(now()) - as_timestamp(last_updated)) > 180 }}
+          {% else %}
+            true
+          {% endif %}
+    then:
+      - action: persistent_notification.create
+        metadata: {}
+        data:
+          message: ROAF automation Fehler
+          notification_id: roaf_fail
+          title: >-
+            Falls diese Meldung nächsten Montag immer noch nicht weg ist - Check
+            ROAF Automation
+      - stop: Roaf Sensor Fehler
+        error: false
+  - action: calendar.get_events
+    metadata: {}
+    data:
+      duration:
+        days: 365
+    target:
+      entity_id: calendar.mullkalender
+    response_variable: upcomingEvents
+  - variables:
+      dates_restmull: "{{ state_attr('sensor.roaf_neste_hentedatoer', 'Restmüll') }}"
+      dates_papier: "{{ state_attr('sensor.roaf_neste_hentedatoer', 'Papier') }}"
+      dates_bio: "{{ state_attr('sensor.roaf_neste_hentedatoer', 'Bio') }}"
+      existing_dates_restmull: >-
+        {{ upcomingEvents['calendar.mullkalender']['events'] |
+        selectattr('summary', '==', 'Restmüll') | map(attribute='start') | list
+        }}
+      existing_dates_papier: >-
+        {{ upcomingEvents['calendar.mullkalender']['events'] |
+        selectattr('summary', '==', 'Papier') | map(attribute='start') | list }}
+      existing_dates_bio: >-
+        {{ upcomingEvents['calendar.mullkalender']['events'] |
+        selectattr('summary', '==', 'Bio') | map(attribute='start') | list }}
+  - repeat:
+      for_each: "{{ dates_restmull }}"
+      sequence:
+        - if:
+            - condition: template
+              value_template: "{{ repeat.item not in existing_dates_restmull }}"
+          then:
+            - action: calendar.create_event
+              metadata: {}
+              data:
+                summary: Restmüll
+                start_date: "{{ repeat.item }}"
+                end_date: >-
+                  {{ (as_datetime(repeat.item) +
+                  timedelta(days=1)).strftime('%Y-%m-%d') }}
+              target:
+                entity_id: calendar.mullkalender
+  - repeat:
+      for_each: "{{ dates_papier }}"
+      sequence:
+        - if:
+            - condition: template
+              value_template: "{{ repeat.item not in existing_dates_papier }}"
+          then:
+            - action: calendar.create_event
+              metadata: {}
+              data:
+                summary: Papier
+                start_date: "{{ repeat.item }}"
+                end_date: >-
+                  {{ (as_datetime(repeat.item) +
+                  timedelta(days=1)).strftime('%Y-%m-%d') }}
+              target:
+                entity_id: calendar.mullkalender
+  - repeat:
+      for_each: "{{ dates_bio }}"
+      sequence:
+        - if:
+            - condition: template
+              value_template: "{{ repeat.item not in existing_dates_bio }}"
+          then:
+            - action: calendar.create_event
+              metadata: {}
+              data:
+                summary: Bio
+                start_date: "{{ repeat.item }}"
+                end_date: >-
+                  {{ (as_datetime(repeat.item) +
+                  timedelta(days=1)).strftime('%Y-%m-%d') }}
+              target:
+                entity_id: calendar.mullkalender
+  - action: persistent_notification.dismiss
+    metadata: {}
+    data:
+      notification_id: roaf_fail
+mode: single
