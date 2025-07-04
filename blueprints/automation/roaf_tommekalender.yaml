@@ -81,11 +81,11 @@ actions:
         days: 60
     target:
       entity_id: calendar.mullkalender
-    response_variable: upcoming
+    response_variable: upcoming_events
 
   - variables:
-      existing_by_type: >-
-        {{ upcoming['calendar.mullkalender']['events'] }}
+      upcoming_events: >-
+        {{ upcoming_events['calendar.mullkalender']['events'] }}
       fraksjoner: |
         {%- set data = roaf_response['content'] if roaf_response['content'] is string -%}
         {%- set parsed = data | from_json -%}
@@ -100,7 +100,7 @@ actions:
             name: >-
               {% if fraksjon == 1 %}Restavfall{% elif fraksjon == 2 %}Papir{% elif fraksjon == 17 %}Matavfall{% else %}Fraksjon {{ fraksjon }}{% endif %}
             existing_dates: >-
-              {{ existing_by_type | selectattr('summary', '==', name)
+              {{ upcoming_events | selectattr('summary', '==', name)
                 | map(attribute='start')
                 | list
               }}
